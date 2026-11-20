@@ -1,0 +1,45 @@
+name: Release Windows Binary
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        shell: pwsh
+        run: |
+          $notes = @(
+            "## CapsLang $env:TAG",
+            '',
+            'macOS-style Caps Lock utility for Windows:',
+            '- **Short tap Caps Lock** -> switches input language (`Win + Space` or `Alt + Shift`)',
+            '- **Hold Caps Lock** -> toggles Caps Lock (configurable 200ms-600ms, default 350ms)',
+            '- **System tray menu** with pause/resume, hold duration, shortcut selection, and Start with Windows',
+            '',
+            'Download `caps-lang.exe` below and double-click to run (no installer required).'
+          ) -join "`n"
+
+          gh release create $env:TAG target/release/caps-lang.exe `
+            --title "CapsLang $env:TAG" `
+            --notes $notes
