@@ -22,6 +22,7 @@ const TRAY_UID: u32 = 1;
 pub const IDM_PAUSE: usize = 1001;
 pub const IDM_STARTUP: usize = 1002;
 pub const IDM_EXIT: usize = 1003;
+pub const IDM_SHOW_OSD: usize = 1004;
 pub const IDM_HOLD_BASE: usize = 2000;
 pub const IDM_METHOD_WIN_SPACE: usize = 3001;
 pub const IDM_METHOD_ALT_SHIFT: usize = 3002;
@@ -172,6 +173,15 @@ pub fn show_context_menu(hwnd: HWND, paused: bool, config: Config, startup_enabl
             );
             append_item(menu, MF_POPUP, method_menu as usize, "Language Shortcut");
         }
+
+        // OSD popup toggle
+        let osd_flags = MF_STRING
+            | if config.show_osd {
+                MF_CHECKED
+            } else {
+                MF_UNCHECKED
+            };
+        append_item(menu, osd_flags, IDM_SHOW_OSD, "Show OSD Popup");
 
         // Start with Windows toggle
         let startup_flags = MF_STRING

@@ -79,14 +79,17 @@ pub fn toggle_paused() -> bool {
 }
 
 /// Called from the window procedure when `TIMER_HOLD_ID` fires.
-pub fn on_hold_timer(hwnd: HWND) {
+/// Returns `true` if Caps Lock was toggled.
+pub fn on_hold_timer(hwnd: HWND) -> bool {
     unsafe {
         KillTimer(hwnd, TIMER_HOLD_ID);
     }
 
     if CAPS_DOWN.load(Ordering::SeqCst) && !HOLD_TRIGGERED.swap(true, Ordering::SeqCst) {
         send_caps_toggle();
+        return true;
     }
+    false
 }
 
 /// Called from the window procedure on `WM_APP_SWITCH_LANG` (outside the hook callback).

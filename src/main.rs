@@ -5,6 +5,8 @@ mod config;
 #[cfg(windows)]
 mod hook;
 #[cfg(windows)]
+mod osd;
+#[cfg(windows)]
 mod tray;
 
 #[cfg(not(windows))]
@@ -32,8 +34,8 @@ mod windows_app {
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::System::Threading::CreateMutexW;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
-        PostQuitMessage, RegisterClassExW, RegisterWindowMessageW, TranslateMessage, MSG,
+        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, KillTimer,
+        PostQuitMessage, RegisterClassExW, RegisterWindowMessageW, SetTimer, TranslateMessage, MSG,
         WM_COMMAND, WM_CONTEXTMENU, WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WM_TIMER,
         WNDCLASSEXW, WS_OVERLAPPED,
     };
@@ -42,14 +44,19 @@ mod windows_app {
         is_startup_enabled, set_startup_enabled, to_wide, Config, SwitchMethod, HOLD_PRESETS,
     };
     use crate::hook::{self, TIMER_HOLD_ID, WM_APP_SWITCH_LANG};
+    use crate::osd::{self, OsdWindow};
     use crate::tray::{
         self, TrayIcon, IDM_EXIT, IDM_HOLD_BASE, IDM_METHOD_ALT_SHIFT, IDM_METHOD_WIN_SPACE,
-        IDM_PAUSE, IDM_STARTUP, WM_TRAY_ICON,
+        IDM_PAUSE, IDM_SHOW_OSD, IDM_STARTUP, WM_TRAY_ICON,
     };
+
+    const TIMER_OSD_LANG_ID: usize = 2;
+    const TIMER_OSD_CAPS_ID: usize = 3;
 
     struct AppState {
         config: Config,
         tray: TrayIcon,
+        osd: Option<OsdWindow>,
         taskbar_created_msg: u32,
     }
 
@@ -124,11 +131,13 @@ mod windows_app {
             let taskbar_msg_name = to_wide("TaskbarCreated");
             let taskbar_created_msg = RegisterWindowMessageW(taskbar_msg_name.as_ptr());
             let tray = TrayIcon::new(hwnd, false, config.hold_duration_ms);
+            let osd = OsdWindow::new();
 
             APP.with(|cell| {
                 *cell.borrow_mut() = Some(AppState {
                     config,
                     tray,
+                    osd,
                     taskbar_created_msg,
                 });
             });
@@ -171,12 +180,35 @@ mod windows_app {
         }
 
         match msg {
-            WM_TIMER if wparam == TIMER_HOLD_ID => {
-                hook::on_hold_timer(hwnd);
+            WM_TIMER => {
+                match wparam {
+                    TIMER_HOLD_ID => {
+                        if hook::on_hold_timer(hwnd) {
+                            // Query Caps Lock toggle state shortly after synthetic keypress.
+                            SetTimer(hwnd, TIMER_OSD_CAPS_ID, 50, None);
+                        }
+                    }
+                    TIMER_OSD_LANG_ID => {
+                        KillTimer(hwnd, TIMER_OSD_LANG_ID);
+                        let code = osd::current_language_code();
+                        show_osd(&code, true);
+                    }
+                    TIMER_OSD_CAPS_ID => {
+                        KillTimer(hwnd, TIMER_OSD_CAPS_ID);
+                        if osd::is_caps_lock_on() {
+                            show_osd("CAPS ON", true);
+                        } else {
+                            show_osd("CAPS OFF", false);
+                        }
+                    }
+                    _ => {}
+                }
                 0
             }
             WM_APP_SWITCH_LANG => {
                 hook::send_switch_language();
+                // Allow Windows ~90ms to apply the new keyboard layout before querying it.
+                SetTimer(hwnd, TIMER_OSD_LANG_ID, 90, None);
                 0
             }
             WM_TRAY_ICON => {
@@ -209,6 +241,18 @@ mod windows_app {
         }
     }
 
+    fn show_osd(text: &str, accent: bool) {
+        APP.with(|cell| {
+            if let Some(state) = cell.borrow().as_ref() {
+                if state.config.show_osd {
+                    if let Some(osd) = state.osd.as_ref() {
+                        osd.show(text, accent);
+                    }
+                }
+            }
+        });
+    }
+
     fn handle_command(hwnd: HWND, cmd: usize) {
         match cmd {
             IDM_PAUSE => {
@@ -219,6 +263,7 @@ mod windows_app {
                     }
                 });
             }
+            IDM_SHOW_OSD => update_config(|c| c.show_osd = !c.show_osd),
             IDM_STARTUP => {
                 let currently_enabled = is_startup_enabled();
                 let _ = set_startup_enabled(!currently_enabled);

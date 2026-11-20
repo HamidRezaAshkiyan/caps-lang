@@ -22,6 +22,68 @@ jobs:
       - name: Build release binary
         run: cargo build --release
 
+      - name: Generate Winget manifests
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        shell: pwsh
+        run: |
+          $version = $env:TAG.TrimStart('v')
+          $sha256 = (Get-FileHash -Path "target/release/caps-lang.exe" -Algorithm SHA256).Hash.ToUpper()
+          $url = "https://github.com/HamidRezaAshkiyan/caps-lang/releases/download/$env:TAG/caps-lang.exe"
+          $outDir = "winget-dist/HamidRezaAshkiyan.CapsLang"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+          @(
+            '# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json',
+            'PackageIdentifier: HamidRezaAshkiyan.CapsLang',
+            "PackageVersion: $version",
+            'DefaultLocale: en-US',
+            'ManifestType: version',
+            'ManifestVersion: 1.6.0'
+          ) -join "`n" | Set-Content -Encoding UTF8 "$outDir/HamidRezaAshkiyan.CapsLang.yaml"
+
+          @(
+            '# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json',
+            'PackageIdentifier: HamidRezaAshkiyan.CapsLang',
+            "PackageVersion: $version",
+            'InstallerType: portable',
+            'Commands:',
+            '- caps-lang',
+            'Installers:',
+            '- Architecture: x64',
+            "  InstallerUrl: $url",
+            "  InstallerSha256: $sha256",
+            'ManifestType: installer',
+            'ManifestVersion: 1.6.0'
+          ) -join "`n" | Set-Content -Encoding UTF8 "$outDir/HamidRezaAshkiyan.CapsLang.installer.yaml"
+
+          @(
+            '# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json',
+            'PackageIdentifier: HamidRezaAshkiyan.CapsLang',
+            "PackageVersion: $version",
+            'PackageLocale: en-US',
+            'Publisher: HamidRezaAshkiyan',
+            'PublisherUrl: https://github.com/HamidRezaAshkiyan',
+            'PublisherSupportUrl: https://github.com/HamidRezaAshkiyan/caps-lang/issues',
+            'PackageName: CapsLang',
+            'PackageUrl: https://github.com/HamidRezaAshkiyan/caps-lang',
+            'License: MIT',
+            'LicenseUrl: https://github.com/HamidRezaAshkiyan/caps-lang/blob/main/LICENSE',
+            'ShortDescription: macOS-style Caps Lock utility for Windows (tap to switch language, hold to toggle Caps Lock).',
+            'Tags:',
+            '- capslock',
+            '- keyboard',
+            '- language',
+            '- utility',
+            '- windows',
+            'ManifestType: defaultLocale',
+            'ManifestVersion: 1.6.0'
+          ) -join "`n" | Set-Content -Encoding UTF8 "$outDir/HamidRezaAshkiyan.CapsLang.locale.en-US.yaml"
+
+          Compress-Archive -Path "$outDir/*" -DestinationPath "winget-manifests.zip" -Force
+          echo "SHA256=$sha256" >> $env:GITHUB_ENV
+
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -35,11 +97,18 @@ jobs:
             'macOS-style Caps Lock utility for Windows:',
             '- **Short tap Caps Lock** -> switches input language (`Win + Space` or `Alt + Shift`)',
             '- **Hold Caps Lock** -> toggles Caps Lock (configurable 200ms-600ms, default 350ms)',
-            '- **System tray menu** with pause/resume, hold duration, shortcut selection, and Start with Windows',
+            '- **Floating OSD pill** -> translucent popup showing active language (`EN`, `FA`, ...) or `CAPS ON` / `CAPS OFF`',
+            '- **System tray menu** -> pause/resume, OSD toggle, hold duration, shortcut selection, Start with Windows',
+            '- **Embedded icon & metadata** in `caps-lang.exe`',
             '',
-            'Download `caps-lang.exe` below and double-click to run (no installer required).'
+            '### Checksum (SHA256)',
+            ('`' + $env:SHA256 + '`'),
+            '',
+            'Download `caps-lang.exe` below and double-click to run (no installer required), or use `winget-manifests.zip` for Winget.'
           ) -join "`n"
 
-          gh release create $env:TAG target/release/caps-lang.exe `
+          gh release create $env:TAG `
+            target/release/caps-lang.exe `
+            winget-manifests.zip `
             --title "CapsLang $env:TAG" `
             --notes $notes

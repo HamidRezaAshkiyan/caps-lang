@@ -1,12 +1,13 @@
 [package]
 name = "caps-lang"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "macOS-style Caps Lock for Windows: tap to switch language, hold to toggle Caps Lock"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
+    "Win32_Globalization",
     "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_System_LibraryLoader",
@@ -16,6 +17,9 @@ windows-sys = { version = "0.59", features = [
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
 
 [profile.release]
 opt-level = "s"

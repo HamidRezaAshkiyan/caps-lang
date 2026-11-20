@@ -17,6 +17,7 @@ const RUN_REG_PATH: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const APP_NAME: &str = "CapsLang";
 const VAL_HOLD_MS: &str = "HoldDurationMs";
 const VAL_SWITCH_METHOD: &str = "SwitchMethod";
+const VAL_SHOW_OSD: &str = "ShowOsd";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
@@ -38,6 +39,7 @@ impl SwitchMethod {
 pub struct Config {
     pub hold_duration_ms: u32,
     pub switch_method: SwitchMethod,
+    pub show_osd: bool,
 }
 
 impl Default for Config {
@@ -45,6 +47,7 @@ impl Default for Config {
         Self {
             hold_duration_ms: DEFAULT_HOLD_MS,
             switch_method: SwitchMethod::WinSpace,
+            show_osd: true,
         }
     }
 }
@@ -70,6 +73,9 @@ impl Config {
                 }
                 if let Some(method) = read_dword(hkey, VAL_SWITCH_METHOD) {
                     cfg.switch_method = SwitchMethod::from_u32(method);
+                }
+                if let Some(osd) = read_dword(hkey, VAL_SHOW_OSD) {
+                    cfg.show_osd = osd != 0;
                 }
                 RegCloseKey(hkey);
             }
@@ -97,6 +103,7 @@ impl Config {
             {
                 write_dword(hkey, VAL_HOLD_MS, self.hold_duration_ms);
                 write_dword(hkey, VAL_SWITCH_METHOD, self.switch_method as u32);
+                write_dword(hkey, VAL_SHOW_OSD, u32::from(self.show_osd));
                 RegCloseKey(hkey);
             }
         }
