@@ -5,11 +5,10 @@ use std::ptr;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Globalization::{GetLocaleInfoW, LOCALE_SISO639LANGNAME};
 use windows_sys::Win32::Graphics::Gdi::{
-    BeginPaint, CreateFontW, CreatePen, CreateRoundRectRgn, CreateSolidBrush, DeleteObject,
-    DrawTextW, EndPaint, InvalidateRect, RoundRect, SelectObject, SetBkMode, SetTextColor,
-    SetWindowRgn, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET, DEFAULT_PITCH,
-    DT_CENTER, DT_SINGLELINE, DT_VCENTER, FF_SWISS, FW_SEMIBOLD, HFONT, OUT_DEFAULT_PRECIS,
-    PAINTSTRUCT, PS_SOLID, TRANSPARENT,
+    BeginPaint, CreateFontW, CreatePen, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint,
+    InvalidateRect, Rectangle, SelectObject, SetBkMode, SetTextColor, CLEARTYPE_QUALITY,
+    CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET, DEFAULT_PITCH, DT_CENTER, DT_SINGLELINE, DT_VCENTER,
+    FF_SWISS, FW_SEMIBOLD, HFONT, OUT_DEFAULT_PRECIS, PAINTSTRUCT, PS_SOLID, TRANSPARENT,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, GetKeyboardLayout, VK_CAPITAL};
@@ -23,13 +22,13 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 use crate::config::to_wide;
 
-const OSD_WIDTH: i32 = 136;
-const OSD_HEIGHT: i32 = 44;
-const OSD_BOTTOM_MARGIN: i32 = 64;
-const OSD_INITIAL_ALPHA: u8 = 232;
-const OSD_HOLD_MS: u32 = 650;
+const OSD_WIDTH: i32 = 88;
+const OSD_HEIGHT: i32 = 28;
+const OSD_MARGIN: i32 = 12;
+const OSD_INITIAL_ALPHA: u8 = 225;
+const OSD_HOLD_MS: u32 = 500;
 const OSD_FADE_INTERVAL_MS: u32 = 16;
-const OSD_FADE_STEP: u8 = 24;
+const OSD_FADE_STEP: u8 = 28;
 
 const TIMER_OSD_HOLD: usize = 101;
 const TIMER_OSD_FADE: usize = 102;
@@ -100,15 +99,9 @@ impl OsdWindow {
                 return None;
             }
 
-            // Apply pill-shaped rounded region.
-            let rgn = CreateRoundRectRgn(0, 0, OSD_WIDTH + 1, OSD_HEIGHT + 1, OSD_HEIGHT, OSD_HEIGHT);
-            if !rgn.is_null() {
-                SetWindowRgn(hwnd, rgn, 0);
-            }
-
             let font_name = to_wide("Segoe UI");
             let font = CreateFontW(
-                -20,
+                -14,
                 0,
                 0,
                 0,
@@ -150,7 +143,7 @@ impl OsdWindow {
             KillTimer(self.hwnd, TIMER_OSD_HOLD);
             KillTimer(self.hwnd, TIMER_OSD_FADE);
 
-            // Position horizontally centered near the bottom of the primary work area.
+            // Position in the top-left corner of the primary work area.
             let mut work: RECT = zeroed();
             if SystemParametersInfoW(
                 SPI_GETWORKAREA,
@@ -159,8 +152,8 @@ impl OsdWindow {
                 0,
             ) != 0
             {
-                let x = work.left + (work.right - work.left - OSD_WIDTH) / 2;
-                let y = work.bottom - OSD_HEIGHT - OSD_BOTTOM_MARGIN;
+                let x = work.left + OSD_MARGIN;
+                let y = work.top + OSD_MARGIN;
                 SetWindowPos(
                     self.hwnd,
                     HWND_TOPMOST,
@@ -210,7 +203,12 @@ pub fn current_language_code() -> String {
         let lang_id = (hkl as usize & 0xFFFF) as u32;
 
         let mut buf = [0u16; 16];
-        let len = GetLocaleInfoW(lang_id, LOCALE_SISO639LANGNAME, buf.as_mut_ptr(), buf.len() as i32);
+        let len = GetLocaleInfoW(
+            lang_id,
+            LOCALE_SISO639LANGNAME,
+            buf.as_mut_ptr(),
+            buf.len() as i32,
+        );
         if len > 1 {
             let code = String::from_utf16_lossy(&buf[..(len as usize - 1)]);
             let upper = code.trim().to_uppercase();
@@ -240,19 +238,19 @@ unsafe extern "system" fn osd_wnd_proc(
 
             OSD_STATE.with(|cell| {
                 if let Some(state) = cell.borrow().as_ref() {
-                    let bg_color = rgb(22, 24, 31);
+                    let bg_color = rgb(18, 18, 22);
                     let border_color = if state.accent {
-                        rgb(59, 130, 246) // Vibrant blue accent
+                        rgb(59, 130, 246)
                     } else {
-                        rgb(82, 88, 102) // Muted gray
+                        rgb(60, 63, 72)
                     };
 
                     let brush = CreateSolidBrush(bg_color);
-                    let pen = CreatePen(PS_SOLID, 2, border_color);
+                    let pen = CreatePen(PS_SOLID, 1, border_color);
                     let old_brush = SelectObject(hdc, brush);
                     let old_pen = SelectObject(hdc, pen);
 
-                    RoundRect(hdc, 1, 1, OSD_WIDTH - 1, OSD_HEIGHT - 1, OSD_HEIGHT - 2, OSD_HEIGHT - 2);
+                    Rectangle(hdc, 0, 0, OSD_WIDTH, OSD_HEIGHT);
 
                     SelectObject(hdc, old_brush);
                     SelectObject(hdc, old_pen);
@@ -260,7 +258,7 @@ unsafe extern "system" fn osd_wnd_proc(
                     DeleteObject(pen);
 
                     SetBkMode(hdc, TRANSPARENT as i32);
-                    SetTextColor(hdc, rgb(248, 250, 252));
+                    SetTextColor(hdc, rgb(244, 244, 246));
 
                     let old_font = if !state.font.is_null() {
                         SelectObject(hdc, state.font)
