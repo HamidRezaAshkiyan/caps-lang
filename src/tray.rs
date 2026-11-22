@@ -75,9 +75,12 @@ impl TrayIcon {
         };
 
         let tip = if paused {
-            "CapsLang (Paused)".to_string()
+            format!("CapsLang v{} (Paused)", env!("CARGO_PKG_VERSION"))
         } else {
-            format!("CapsLang — Tap: Language | Hold ({hold_ms}ms): Caps Lock")
+            format!(
+                "CapsLang v{} — Tap: Language | Hold ({hold_ms}ms): Caps Lock",
+                env!("CARGO_PKG_VERSION")
+            )
         };
         let wide = to_wide(&tip);
         let copy_len = wide.len().min(nid.szTip.len());
@@ -116,9 +119,13 @@ pub fn show_context_menu(hwnd: HWND, paused: bool, config: Config, startup_enabl
 
         // Status header
         let status_label = if paused {
-            "CapsLang — Paused".to_string()
+            format!("CapsLang v{} — Paused", env!("CARGO_PKG_VERSION"))
         } else {
-            format!("CapsLang — Active ({} ms)", config.hold_duration_ms)
+            format!(
+                "CapsLang v{} — Active ({} ms)",
+                env!("CARGO_PKG_VERSION"),
+                config.hold_duration_ms
+            )
         };
         append_item(menu, MF_STRING | MF_GRAYED, 0, &status_label);
         AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
